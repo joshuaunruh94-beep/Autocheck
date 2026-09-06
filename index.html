@@ -144,13 +144,13 @@
     </div>
     <div class="grid" style="margin-top:14px">
       <div class="field"><label>Kilometer pro Jahr</label><input id="cmpKm" type="number" value="15000" min="1000" step="1000"></div>
-      <div class="field"><label>Energiepreis (€ / Einheit)</label><input id="cmpEnergyPrice" type="number" value="1.85" min="0" step=".01"></div>
+      <div class="field" id="cmpEnergyFields"></div>
       <div class="field"><label>Versicherung Auto 1 / Jahr (€)</label><input id="cmpIns0" type="number" value="" placeholder="Automatisch geschätzt"></div>
       <div class="field"><label>Versicherung Auto 2 / Jahr (€)</label><input id="cmpIns1" type="number" value="" placeholder="Automatisch geschätzt"></div>
       <div class="field"><label>Wartung + Reifen Auto 1 / Jahr (€)</label><input id="cmpMaint0" type="number" value="" placeholder="Automatisch geschätzt" min="0"></div>
       <div class="field"><label>Wartung + Reifen Auto 2 / Jahr (€)</label><input id="cmpMaint1" type="number" value="" placeholder="Automatisch geschätzt" min="0"></div>
     </div>
-    <div class="callout" style="margin-top:14px"><b>AutoCheck schätzt unbekannte Kosten.</b> Du musst die Wartungs- und Reifenkosten eines fremden Autos nicht kennen. Eigene Werte kannst du jederzeit überschreiben.</div>
+    <div class="callout" style="margin-top:14px"><b>Energiepreise werden als Preis pro Liter bzw. kWh eingegeben.</b> Bei unterschiedlichen Antrieben erhält jedes Auto ein eigenes Preisfeld. <br><br><b>AutoCheck schätzt unbekannte Kosten.</b> Du musst die Wartungs- und Reifenkosten eines fremden Autos nicht kennen. Eigene Werte kannst du jederzeit überschreiben.</div>
     <button class="btn primary" style="margin-top:14px" onclick="renderCompare()">Vergleich berechnen →</button>
   </div>
   <div class="card compare-result" id="compareResult" style="display:none"></div>
@@ -456,6 +456,27 @@ function renderPickers(){
   renderCompareInputs();
 }
 function clearCar(i){selected[i]=null;renderPickers();renderCompareInputs();renderCompare()}
+function compareEnergyType(c){
+  const f=String(c?.fuel||'').toLowerCase();
+  if(f.includes('diesel'))return 'diesel';
+  if(f.includes('elektro')||f.includes('electric')||f==='ev')return 'electric';
+  if(f.includes('plug-in')||f.includes('plug in')||f.includes('phev'))return 'plugin';
+  if(f.includes('hybrid'))return 'hybrid';
+  return 'petrol';
+}
+function compareEnergyMeta(type){
+  return {
+    petrol:{label:'Benzinpreis (€/l)',placeholder:'z. B. 1,85',fallback:1.85},
+    diesel:{label:'Dieselpreis (€/l)',placeholder:'z. B. 1,75',fallback:1.75},
+    electric:{label:'Strompreis (€/kWh)',placeholder:'z. B. 0,35',fallback:.35},
+    hybrid:{label:'Benzinpreis (€/l)',placeholder:'z. B. 1,85',fallback:1.85},
+    plugin:{label:'Benzinpreis (€/l)',placeholder:'z. B. 1,85',fallback:1.85}
+  }[type]||{label:'Energiepreis',placeholder:'Optional',fallback:1.85};
+}
+function compareEnergyField(type,id,labelSuffix=''){
+  const m=compareEnergyMeta(type);
+  return `<div class="field"><label>${m.label}${labelSuffix}</label><input id="${id}" data-fallback="${m.fallback}" type="number" min="0" step=".01" placeholder="${m.placeholder}"><small>Preis pro Liter bzw. kWh – nicht €/km.</small></div>`;
+}
 function renderCompareInputs(){
   const el=document.getElementById('compareInputs');
   if(!el)return;
@@ -464,12 +485,28 @@ function renderCompareInputs(){
     const i0=document.getElementById('cmpIns0'),i1=document.getElementById('cmpIns1');
     if(i0&&!i0.value)i0.value=selected[0].ins;
     if(i1&&!i1.value)i1.value=selected[1].ins;
+    const ef=document.getElementById('cmpEnergyFields');
+    if(ef){
+      const t0=compareEnergyType(selected[0]),t1=compareEnergyType(selected[1]);
+      if(t0===t1){
+        ef.innerHTML=compareEnergyField(t0,'cmpEnergyPriceShared');
+      }else{
+        ef.innerHTML=compareEnergyField(t0,'cmpEnergyPrice0',' · '+(selected[0].name||'Auto 1'))+compareEnergyField(t1,'cmpEnergyPrice1',' · '+(selected[1].name||'Auto 2'));
+      }
+    }
   }
 }
-function clearCar(i){selected[i]=null;renderPickers();renderCompare()}
+function clearCar(i){selected[i]=null;renderPickers();renderCompareInputs();renderCompare()}
+function compareEnergyPrice(c,i){
+  const type=compareEnergyType(c),m=compareEnergyMeta(type);
+  const shared=document.getElementById('cmpEnergyPriceShared');
+  const input=document.getElementById('cmpEnergyPrice'+i);
+  const el=shared||input;
+  return el&&el.value!==''?Number(el.value):m.fallback;
+}
 function annualCost(c,custom={}){
   const km=Number(custom.km||15000);
-  const energyPrice=Number(custom.energyPrice||1.85);
+  const energyPrice=Number(custom.energyPrice??1.85);
   const energy=km*c.cons/100*energyPrice;
   const dep=Math.max(0,(c.price-Math.max(c.price*.12,c.price*c.res*(1-.045*5))))/5;
   const ins=custom.ins!=null?Number(custom.ins):c.ins;
@@ -536,21 +573,22 @@ function renderCompare(){
   const box=document.getElementById('compareResult');
   if(!selected[0]||!selected[1]){box.style.display='none';return}
   const km=Number(document.getElementById('cmpKm')?.value||15000);
-  const energyPrice=Number(document.getElementById('cmpEnergyPrice')?.value||1.85);
+  const energyPrice0=compareEnergyPrice(selected[0],0);
+  const energyPrice1=compareEnergyPrice(selected[1],1);
   const ins0=document.getElementById('cmpIns0')?.value!==''?Number(document.getElementById('cmpIns0').value):selected[0].ins;
   const ins1=document.getElementById('cmpIns1')?.value!==''?Number(document.getElementById('cmpIns1').value):selected[1].ins;
   const maint0=document.getElementById('cmpMaint0')?.value!==''?Number(document.getElementById('cmpMaint0').value):estimateCompareMaintenance(selected[0],km);
   const maint1=document.getElementById('cmpMaint1')?.value!==''?Number(document.getElementById('cmpMaint1').value):estimateCompareMaintenance(selected[1],km);
   const a=selected[0],b=selected[1];
-  const costA=annualCost(a,{km,energyPrice,ins:ins0,maint:maint0});
-  const costB=annualCost(b,{km,energyPrice,ins:ins1,maint:maint1});
+  const costA=annualCost(a,{km,energyPrice:energyPrice0,ins:ins0,maint:maint0});
+  const costB=annualCost(b,{km,energyPrice:energyPrice1,ins:ins1,maint:maint1});
   const sa=score(a),sb=score(b);
   const rows=[
     moneyRow('Gesamtkosten / Jahr',costA,costB,money,betterLow),
     moneyRow('Gesamtkosten / Monat',costA/12,costB/12,money,betterLow),
     moneyRow('Versicherung / Jahr',ins0,ins1,money,betterLow),
     moneyRow('Steuer / Jahr',a.tax,b.tax,money,betterLow),
-    moneyRow('Energie / Jahr',km*a.cons/100*energyPrice,km*b.cons/100*energyPrice,money,betterLow),
+    moneyRow('Energie / Jahr',km*a.cons/100*energyPrice0,km*b.cons/100*energyPrice1,money,betterLow),
     moneyRow('Wertverlust / Jahr',Math.max(0,(a.price-Math.max(a.price*.12,a.price*a.res*(1-.045*5)))/5),Math.max(0,(b.price-Math.max(b.price*.12,b.price*b.res*(1-.045*5)))/5),money,betterLow),
     moneyRow('Wartung + Reifen / Jahr',a.maint+a.tires,b.maint+b.tires,money,betterLow)
   ];
