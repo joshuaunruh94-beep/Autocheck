@@ -1132,113 +1132,138 @@ document.getElementById('purchaseCost')?.addEventListener('input',()=>{ const p=
 </style>
 
 <script>
-/* AutoCheck V62 – Fahrzeugsuche:
-   Marke -> Modell -> Variante/Ausstattung.
-   Nach Eingabe einer Marke werden ausschließlich Modelle angezeigt.
-   Erst nach Auswahl eines Modells erscheinen die Varianten. */
+/* AutoCheck V64 – klare 3-stufige Fahrzeugsuche
+   1. Marke
+   2. Modell
+   3. Variante / Motorisierung / Ausstattung
+   Auf der Modellebene werden niemals konkrete Motorisierungen angezeigt. */
 (function(){
   function db(){ return (typeof cars !== 'undefined' && Array.isArray(cars)) ? cars : []; }
-  function clean(s){ return String(s||'').trim(); }
-  function brand(c){ return clean(c.brand); }
-  function model(c){ return clean(c.model); }
-  function variant(c){ return clean(c.variant || c.trim || c.name || '') || 'Basisversion'; }
+  const clean=s=>String(s||'').trim();
+  const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const brand=c=>clean(c.brand);
+  const rawModel=c=>clean(c.model);
+  const variant=c=>clean(c.variant||c.trim||c.name||'')||'Basisversion';
 
-  function uniqueModels(list){
-    const map = new Map();
-    list.forEach(c => { if(model(c) && !map.has(model(c))) map.set(model(c), c); });
-    return [...map.values()].sort((a,b)=>model(a).localeCompare(model(b),'de',{numeric:true,sensitivity:'base'}));
+  /* Conservative model-family normalization. The raw record remains untouched;
+     normalization is used only to decide which records belong to one model. */
+  function modelFamily(c){
+    let m=rawModel(c), b=brand(c).toLowerCase();
+
+    if(b.includes('mitsubishi')){
+      m=m.replace(/\s+(?:\d+(?:\.\d+)?\s*(?:turbo|mpi|mivec|di-d|did|d-id)|phev|he\w*|hybrid|ev|electric|awd|4wd).*$/i,'').trim();
+    }
+
+    /* Remove obvious engine suffixes only when they are appended to a model.
+       Do not change the displayed raw model or variant. */
+    m=m.replace(/\s+(?:\d{3,4}\s?(?:cc|tsi|tfsi|tfs[i]?|tdi|dci|hdi|gdi|mpi)|\d+(?:\.\d+)?\s?(?:l|liter)\s*(?:diesel|benzine|petrol|hybrid)?).*$/i,'').trim();
+
+    return m||rawModel(c);
   }
 
-  function variantsFor(brandName, modelName){
-    return db().filter(c=>brand(c)===brandName && model(c)===modelName)
+  function modelId(c){
+    return brand(c).toLowerCase()+'|'+modelFamily(c).toLowerCase();
+  }
+
+  function modelsForBrand(b){
+    const map=new Map();
+    db().filter(c=>brand(c).toLowerCase()===String(b).toLowerCase()).forEach(c=>{
+      const id=modelId(c);
+      if(!map.has(id)) map.set(id,{brand:brand(c),model:modelFamily(c),count:0});
+      map.get(id).count++;
+    });
+    return [...map.values()].sort((a,b)=>a.model.localeCompare(b.model,'de',{numeric:true,sensitivity:'base'}));
+  }
+
+  function variantsFor(b,m){
+    return db().filter(c=>brand(c).toLowerCase()===String(b).toLowerCase() &&
+      modelFamily(c).toLowerCase()===String(m).toLowerCase())
       .sort((a,b)=>{
-        const ab=/basis|base|standard|trend/i.test(variant(a));
+        const aa=/basis|base|standard|trend/i.test(variant(a));
         const bb=/basis|base|standard|trend/i.test(variant(b));
-        if(ab!==bb) return ab ? -1 : 1;
-        return variant(a).localeCompare(variant(b),'de',{numeric:true,sensitivity:'base'});
+        if(aa!==bb) return aa?-1:1;
+        return (variant(a)+' '+(a.year||'')).localeCompare(
+          variant(b)+' '+(b.year||''),'de',{numeric:true,sensitivity:'base'});
       });
   }
 
-  function esc(s){
-    return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  }
+  function box(){ return document.getElementById('ac-v61-results'); }
 
-  window.acV62ShowModels = function(brandName){
-    const box=document.getElementById('ac-v61-results');
-    if(!box) return;
-    const models=uniqueModels(db().filter(c=>brand(c).toLowerCase()===String(brandName).toLowerCase()));
-    box.innerHTML=`
-      <div class="ac-v61-head"><strong>${esc(brandName)}</strong></div>
-      <div class="ac-v61-sub">Modell auswählen</div>
+  window.acV64ShowBrands=function(){
+    const el=box(); if(!el)return;
+    const map=new Map();
+    db().forEach(c=>{if(brand(c)&&!map.has(brand(c).toLowerCase()))map.set(brand(c).toLowerCase(),brand(c));});
+    const brands=[...map.values()].sort((a,b)=>a.localeCompare(b,'de'));
+    el.innerHTML=`<div class="ac-v61-sub">Marke auswählen</div><div class="ac-v61-list">
+      ${brands.map(b=>`<button type="button" class="ac-v61-item" onclick="acV64ShowModels(${JSON.stringify(b)})">
+        <span class="ac-v61-item-main">${esc(b)}</span>
+      </button>`).join('')}</div>`;
+  };
+
+  window.acV64ShowModels=function(b){
+    const el=box(); if(!el)return;
+    const models=modelsForBrand(b);
+    el.innerHTML=`<div class="ac-v61-head"><button type="button" class="ac-v61-back" onclick="acV64ShowBrands()">← Marken</button><strong>${esc(b)}</strong></div>
+      <div class="ac-v61-sub">Modell auswählen</div><div class="ac-v61-list">
+      ${models.map(x=>`<button type="button" class="ac-v61-item" onclick="acV64ShowVariants(${JSON.stringify(b)},${JSON.stringify(x.model)})">
+        <span class="ac-v61-item-main">${esc(x.model)}</span>
+      </button>`).join('')}</div>`;
+  };
+
+  window.acV64ShowVariants=function(b,m){
+    const el=box(); if(!el)return;
+    const list=variantsFor(b,m);
+    el.innerHTML=`<div class="ac-v61-head">
+      <button type="button" class="ac-v61-back" onclick="acV64ShowModels(${JSON.stringify(b)})">← ${esc(b)}</button>
+      <strong>${esc(m)}</strong></div>
+      <div class="ac-v61-sub">Variante / Motorisierung / Ausstattung auswählen</div>
       <div class="ac-v61-list">
-        ${models.map(c=>{
-          const n=esc(model(c));
-          const count=db().filter(x=>brand(x)===brandName&&model(x)===model(c)).length;
-          return `<button type="button" class="ac-v61-item" onclick="acV62ShowVariants(${JSON.stringify(brandName)},${JSON.stringify(model(c))})">
-            <span class="ac-v61-item-main">${n}</span>
-            <span class="ac-v61-item-meta">${count} ${count===1?'Variante':'Varianten'}</span>
-          </button>`;
-        }).join('')}
-      </div>`;
+      ${list.map((c,i)=>`<button type="button" class="ac-v61-item ${i===0?'ac-v61-base':''}" onclick='acV64SelectCar(${JSON.stringify(c)})'>
+        <span class="ac-v61-item-main">${esc(variant(c))}</span>
+        ${i===0?'<span class="ac-v61-base-label">Basisversion</span>':''}
+        <span class="ac-v61-item-meta">${c.year?esc(c.year)+' · ':''}${c.hp?esc(c.hp)+' PS':''}${c.cons?' · '+esc(c.cons)+' '+(String(c.drive||'').toLowerCase().includes('elekt')?'kWh/100 km':'l/100 km'):''}</span>
+      </button>`).join('')}</div>`;
   };
 
-  window.acV62ShowVariants = function(brandName, modelName){
-    const box=document.getElementById('ac-v61-results');
-    if(!box) return;
-    const list=variantsFor(brandName,modelName);
-    box.innerHTML=`
-      <div class="ac-v61-head">
-        <button type="button" class="ac-v61-back" onclick="acV62ShowModels(${JSON.stringify(brandName)})">← ${esc(brandName)}</button>
-        <strong>${esc(modelName)}</strong>
-      </div>
-      <div class="ac-v61-sub">Variante / Ausstattung auswählen</div>
-      <div class="ac-v61-list">
-        ${list.map((c,i)=>`
-          <button type="button" class="ac-v61-item ${i===0?'ac-v61-base':''}" onclick='acV62SelectCar(${JSON.stringify(c)})'>
-            <span class="ac-v61-item-main">${esc(variant(c))}</span>
-            ${i===0?'<span class="ac-v61-base-label">Basisversion</span>':''}
-            <span class="ac-v61-item-meta">${c.year?esc(c.year)+' · ':''}${c.hp?esc(c.hp)+' PS':''}${c.cons?' · '+esc(c.cons)+' '+(String(c.drive||'').toLowerCase().includes('elekt')?'kWh/100 km':'l/100 km'):''}</span>
-          </button>`).join('')}
-      </div>`;
-  };
-
-  window.acV62SelectCar = function(c){
-    if(typeof setMyCar==='function') setMyCar(c);
+  window.acV64SelectCar=function(c){
+    if(typeof setMyCar==='function')setMyCar(c);
     const input=document.getElementById('car-search');
-    if(input) input.value=(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+model(c)+' '+variant(c)));
-    const results=document.getElementById('ac-v61-results');
-    if(results) results.innerHTML='<div class="ac-v61-selected">✓ '+esc(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+model(c)+' '+variant(c)))+'</div>';
+    if(input)input.value=(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+rawModel(c)+' '+variant(c)));
+    const el=box();
+    if(el)el.innerHTML='<div class="ac-v61-selected">✓ '+esc(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+rawModel(c)+' '+variant(c)))+'</div>';
   };
 
-  // The existing search remains the entry point. When a brand is typed,
-  // show its model list instead of every variant.
-  function updateFromSearch(){
-    const input=document.getElementById('car-search');
-    const box=document.getElementById('ac-v61-results');
-    if(!input || !box) return;
+  function search(){
+    const input=document.getElementById('car-search'), el=box();
+    if(!input||!el)return;
     const q=clean(input.value).toLowerCase();
-    if(!q) return;
-    const exactBrand=db().find(c=>brand(c).toLowerCase()===q);
-    if(exactBrand){
-      acV62ShowModels(brand(exactBrand));
-      return;
-    }
-    // If a brand prefix is typed, show models for the matching brand.
-    const b=db().find(c=>brand(c).toLowerCase().startsWith(q));
-    if(b){
-      acV62ShowModels(brand(b));
-      return;
+    if(!q){acV64ShowBrands();return;}
+
+    /* If the complete brand is typed, ALWAYS go to the model level. */
+    const exact=db().find(c=>brand(c).toLowerCase()===q);
+    if(exact){acV64ShowModels(brand(exact));return;}
+
+    /* Brand prefix/partial match: still show ONLY models. */
+    const brands=[...new Set(db().filter(c=>brand(c).toLowerCase().includes(q)).map(brand))];
+    if(brands.length===1){acV64ShowModels(brands[0]);return;}
+
+    /* For a model query, show models, not variants. The user must click
+       the model before variants can appear. */
+    const modelMatches=modelsForBrand(brands[0]||'').filter(x=>x.model.toLowerCase().includes(q));
+    if(modelMatches.length){
+      el.innerHTML=`<div class="ac-v61-sub">Modell auswählen</div><div class="ac-v61-list">
+        ${modelMatches.map(x=>`<button type="button" class="ac-v61-item" onclick="acV64ShowVariants(${JSON.stringify(x.brand)},${JSON.stringify(x.model)})">
+          <span class="ac-v61-item-main">${esc(x.model)}</span></button>`).join('')}</div>`;
     }
   }
 
   function mount(){
-    const box=document.getElementById('ac-v61-results');
     const input=document.getElementById('car-search');
-    if(!box || !input) return;
-    input.addEventListener('input',updateFromSearch);
-    input.addEventListener('focus',()=>{ if(clean(input.value)) updateFromSearch(); });
+    if(!input)return;
+    input.addEventListener('input',search);
+    input.addEventListener('focus',()=>{if(clean(input.value))search();});
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',mount); else mount();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
 </script>
 
