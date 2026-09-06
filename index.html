@@ -1116,4 +1116,130 @@ function openMarketValueFromCosts(){
 document.getElementById('purchaseCost')?.addEventListener('input',()=>{ const p=document.getElementById('purchaseCost').value; const d=document.getElementById('purchasePrice'); if(d && p!=='') d.value=p; });
 </script>
 
+
+<style>
+.ac-v61-results{margin-top:10px}
+.ac-v61-sub{font-size:13px;opacity:.72;margin:4px 0 8px}
+.ac-v61-head{display:flex;align-items:center;gap:10px;margin:2px 0 8px}
+.ac-v61-back{border:0;background:none;padding:0;font:inherit;cursor:pointer}
+.ac-v61-list{display:grid;gap:7px}
+.ac-v61-item{width:100%;text-align:left;border:1px solid rgba(127,127,127,.25);border-radius:10px;background:transparent;padding:11px 13px;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:3px 10px}
+.ac-v61-item:hover{border-color:currentColor}
+.ac-v61-item-main{font-weight:600}
+.ac-v61-item-meta{font-size:12px;opacity:.65;grid-column:1/-1}
+.ac-v61-base-label{font-size:11px;opacity:.7}
+.ac-v61-selected{padding:10px 12px;border-radius:10px;background:rgba(127,127,127,.1);font-weight:600}
+</style>
+
+<script>
+/* AutoCheck V62 – Fahrzeugsuche:
+   Marke -> Modell -> Variante/Ausstattung.
+   Nach Eingabe einer Marke werden ausschließlich Modelle angezeigt.
+   Erst nach Auswahl eines Modells erscheinen die Varianten. */
+(function(){
+  function db(){ return (typeof cars !== 'undefined' && Array.isArray(cars)) ? cars : []; }
+  function clean(s){ return String(s||'').trim(); }
+  function brand(c){ return clean(c.brand); }
+  function model(c){ return clean(c.model); }
+  function variant(c){ return clean(c.variant || c.trim || c.name || '') || 'Basisversion'; }
+
+  function uniqueModels(list){
+    const map = new Map();
+    list.forEach(c => { if(model(c) && !map.has(model(c))) map.set(model(c), c); });
+    return [...map.values()].sort((a,b)=>model(a).localeCompare(model(b),'de',{numeric:true,sensitivity:'base'}));
+  }
+
+  function variantsFor(brandName, modelName){
+    return db().filter(c=>brand(c)===brandName && model(c)===modelName)
+      .sort((a,b)=>{
+        const ab=/basis|base|standard|trend/i.test(variant(a));
+        const bb=/basis|base|standard|trend/i.test(variant(b));
+        if(ab!==bb) return ab ? -1 : 1;
+        return variant(a).localeCompare(variant(b),'de',{numeric:true,sensitivity:'base'});
+      });
+  }
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  window.acV62ShowModels = function(brandName){
+    const box=document.getElementById('ac-v61-results');
+    if(!box) return;
+    const models=uniqueModels(db().filter(c=>brand(c).toLowerCase()===String(brandName).toLowerCase()));
+    box.innerHTML=`
+      <div class="ac-v61-head"><strong>${esc(brandName)}</strong></div>
+      <div class="ac-v61-sub">Modell auswählen</div>
+      <div class="ac-v61-list">
+        ${models.map(c=>{
+          const n=esc(model(c));
+          const count=db().filter(x=>brand(x)===brandName&&model(x)===model(c)).length;
+          return `<button type="button" class="ac-v61-item" onclick="acV62ShowVariants(${JSON.stringify(brandName)},${JSON.stringify(model(c))})">
+            <span class="ac-v61-item-main">${n}</span>
+            <span class="ac-v61-item-meta">${count} ${count===1?'Variante':'Varianten'}</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+  };
+
+  window.acV62ShowVariants = function(brandName, modelName){
+    const box=document.getElementById('ac-v61-results');
+    if(!box) return;
+    const list=variantsFor(brandName,modelName);
+    box.innerHTML=`
+      <div class="ac-v61-head">
+        <button type="button" class="ac-v61-back" onclick="acV62ShowModels(${JSON.stringify(brandName)})">← ${esc(brandName)}</button>
+        <strong>${esc(modelName)}</strong>
+      </div>
+      <div class="ac-v61-sub">Variante / Ausstattung auswählen</div>
+      <div class="ac-v61-list">
+        ${list.map((c,i)=>`
+          <button type="button" class="ac-v61-item ${i===0?'ac-v61-base':''}" onclick='acV62SelectCar(${JSON.stringify(c)})'>
+            <span class="ac-v61-item-main">${esc(variant(c))}</span>
+            ${i===0?'<span class="ac-v61-base-label">Basisversion</span>':''}
+            <span class="ac-v61-item-meta">${c.year?esc(c.year)+' · ':''}${c.hp?esc(c.hp)+' PS':''}${c.cons?' · '+esc(c.cons)+' '+(String(c.drive||'').toLowerCase().includes('elekt')?'kWh/100 km':'l/100 km'):''}</span>
+          </button>`).join('')}
+      </div>`;
+  };
+
+  window.acV62SelectCar = function(c){
+    if(typeof setMyCar==='function') setMyCar(c);
+    const input=document.getElementById('car-search');
+    if(input) input.value=(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+model(c)+' '+variant(c)));
+    const results=document.getElementById('ac-v61-results');
+    if(results) results.innerHTML='<div class="ac-v61-selected">✓ '+esc(typeof carDisplayName==='function'?carDisplayName(c):(brand(c)+' '+model(c)+' '+variant(c)))+'</div>';
+  };
+
+  // The existing search remains the entry point. When a brand is typed,
+  // show its model list instead of every variant.
+  function updateFromSearch(){
+    const input=document.getElementById('car-search');
+    const box=document.getElementById('ac-v61-results');
+    if(!input || !box) return;
+    const q=clean(input.value).toLowerCase();
+    if(!q) return;
+    const exactBrand=db().find(c=>brand(c).toLowerCase()===q);
+    if(exactBrand){
+      acV62ShowModels(brand(exactBrand));
+      return;
+    }
+    // If a brand prefix is typed, show models for the matching brand.
+    const b=db().find(c=>brand(c).toLowerCase().startsWith(q));
+    if(b){
+      acV62ShowModels(brand(b));
+      return;
+    }
+  }
+
+  function mount(){
+    const box=document.getElementById('ac-v61-results');
+    const input=document.getElementById('car-search');
+    if(!box || !input) return;
+    input.addEventListener('input',updateFromSearch);
+    input.addEventListener('focus',()=>{ if(clean(input.value)) updateFromSearch(); });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',mount); else mount();
+})();
+</script>
+
 </body></html>
