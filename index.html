@@ -868,7 +868,7 @@ document.getElementById('budgetFind').onclick=()=>{
  let overBudget=false;
  if(!arr.length){arr=candidates.slice(0,6);overBudget=true;}
  if(!arr.length){box.innerHTML='<div class="callout" style="grid-column:1/-1">Für diese Fahrzeugklasse sind aktuell keine passenden Fahrzeuge in der Datenbasis. Wähle „Alle Klassen“ oder ändere die Auswahl.</div>';return}
- box.innerHTML=`<div style="grid-column:1/-1"><div class="budget-summary"><div class="metric"><span>Dein Budget</span><strong>${money(budget)}/Monat</strong></div><div class="metric"><span>Fahrleistung</span><strong>${kr.min.toLocaleString('de-DE')}–${kr.max.toLocaleString('de-DE')} km</strong></div><div class="metric"><span>Modus</span><strong>${budgetMode==='buy'?'Kauf':'Leasing'}</strong></div><div class="metric"><span>Treffer</span><strong>${arr.length}</strong></div></div><div class="callout" style="margin-top:10px"><b>${overBudget?'Nächste passende Fahrzeuge':'So wählt AutoCheck'}:</b> Nicht nach Kaufpreis oder Leasingrate allein, sondern nach den geschätzten Gesamtkosten pro Monat bei ${km.toLocaleString('de-DE')} km/Jahr. Die Fahrleistung wird zusätzlich als Spanne von ${kr.min.toLocaleString('de-DE')}–${kr.max.toLocaleString('de-DE')} km geprüft.</div></div>${arr.map((c,i)=>`<div class="suggestion-card budget-card"><div class="muted">${i===0?'TOP-MATCH':'PASSEND'}</div><h4>${c.brand} ${c.model} ${c.variant}</h4><div class="pills"><span class="pill">${c.year}</span><span class="pill">${c.hp} PS</span><span class="pill">${c.fuel}</span><span class="pill">${money(c.mid.total)}/Monat</span></div><div class="budget-range">${money(c.lo.total)}–${money(c.hi.total)} / Monat bei deiner km-Spanne</div><div class="why"><b>Bei ${km.toLocaleString('de-DE')} km/Jahr:</b> ${money(c.mid.total)}/Monat inkl. ${budgetMode==='buy'?'Wertverlust,':'Leasingkosten,'} Versicherung, Steuer, ${c.fuel==='Elektro'?'Strom':'Sprit'}, Wartung & Reifen.</div><div class="budget-score"><div class="budget-score-head"><span>AutoCheck Score · ${score(c).total>=80?'sehr stark':score(c).total>=65?'stark':'solide'}</span><span class="budget-score-value">${score(c).total}/100</span></div><div class="budget-score-track" style="--score:${score(c).total}"><i></i></div></div><details class="budget-details"><summary>Genauen Kostenweg anzeigen</summary>${budgetRoute(c,km,budgetMode==='buy'?'buy':'lease')}${budgetOfferCards(c,km)}</details><button class="btn ghost" style="margin-top:12px" onclick="selected=[cars.find(x=>x.id==='${c.id}'),null];show('vergleich');renderPickers();renderCompare()">Vergleichen →</button></div>`).join('')}<div class="leasing-note" style="grid-column:1/-1"> Aktuell sind Kosten und Angebotsbausteine Schätzungen bzw. Beispiele. Echte Versicherungs-, Leasing-, Energie- und Werkstattpreise werden erst nach Partner-/Datenanbindung als echte Angebote angezeigt.</div>`;
+ box.innerHTML=`<div style="grid-column:1/-1"><div class="budget-summary"><div class="metric"><span>Dein Budget</span><strong>${money(budget)}/Monat</strong></div><div class="metric"><span>Fahrleistung</span><strong>${kr.min.toLocaleString('de-DE')}–${kr.max.toLocaleString('de-DE')} km</strong></div><div class="metric"><span>Modus</span><strong>${budgetMode==='buy'?'Kauf':'Leasing'}</strong></div><div class="metric"><span>Treffer</span><strong>${arr.length}</strong></div></div><div class="callout" style="margin-top:10px"><b>${overBudget?'Nächste passende Fahrzeuge':'So wählt AutoCheck'}:</b> Nicht nach Kaufpreis oder Leasingrate allein, sondern nach den geschätzten Gesamtkosten pro Monat bei ${km.toLocaleString('de-DE')} km/Jahr. Die Fahrleistung wird zusätzlich als Spanne von ${kr.min.toLocaleString('de-DE')}–${kr.max.toLocaleString('de-DE')} km geprüft.</div></div>${arr.map((c,i)=>`<div class="suggestion-card budget-card"><div class="muted">${i===0?'TOP-MATCH':'PASSEND'}</div><h4>${c.brand} ${c.model} ${c.variant}</h4><div class="pills"><span class="pill">${c.year}</span><span class="pill">${c.hp} PS</span><span class="pill">${c.fuel}</span><span class="pill">${money(c.mid.total)}/Monat</span></div><div class="budget-range">${money(c.lo.total)}–${money(c.hi.total)} / Monat bei deiner km-Spanne</div><div class="why"><b>Bei ${km.toLocaleString('de-DE')} km/Jahr:</b> ${money(c.mid.total)}/Monat inkl. ${budgetMode==='buy'?'Wertverlust,':'Leasingkosten,'} Versicherung, Steuer, ${c.fuel==='Elektro'?'Strom':'Sprit'}, Wartung & Reifen.</div><div class="budget-score"><div class="budget-score-head"><span>AutoCheck Score · ${score(c).total>=80?'sehr stark':score(c).total>=65?'stark':'solide'}</span><span class="budget-score-value">${score(c).total}/100</span></div><div class="budget-score-track" style="--score:${score(c).total}"><i></i></div></div><details class="budget-details"><summary>Genauen Kostenweg anzeigen</summary>${budgetRoute(c,km,budgetMode==='buy'?'buy':'lease')}${budgetOfferCards(c,km)}</details><button class="btn ghost" style="margin-top:12px" onclick='acV66BudgetCompareClick(cars.find(x=>x.id===&quot;${c.id}&quot;))'>Vergleichen →</button></div>`).join('')}<div class="leasing-note" style="grid-column:1/-1"> Aktuell sind Kosten und Angebotsbausteine Schätzungen bzw. Beispiele. Echte Versicherungs-, Leasing-, Energie- und Werkstattpreise werden erst nach Partner-/Datenanbindung als echte Angebote angezeigt.</div>`;
  } catch(err) {
    console.error('AutoCheck Budget:', err);
    const box=document.getElementById('budgetResults');
@@ -1438,6 +1438,35 @@ document.getElementById('purchaseCost')?.addEventListener('input',()=>{ const p=
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe);
   else observe();
+})();
+</script>
+
+
+<script>
+/* AutoCheck V68 – Budget → Vergleich
+   The Budget result button is the single source of truth for adding a car.
+   It never preloads all recommendations and preserves existing comparison cars. */
+(function(){
+  window.acV68BudgetCompare=function(id){
+    const car=(typeof cars!=='undefined' && Array.isArray(cars))
+      ? cars.find(x=>String(x.id)===String(id)) : null;
+    if(!car) return;
+    if(typeof window.acV66BudgetCompareClick==='function'){
+      window.acV66BudgetCompareClick(car);
+      return;
+    }
+    if(typeof selected!=='undefined' && Array.isArray(selected)){
+      while(selected.length<3) selected.push(null);
+      const same=(a,b)=>a&&b&&String(a.id)===String(b.id);
+      if(!selected.some(x=>same(x,car))){
+        const i=selected.findIndex(x=>!x);
+        if(i>=0) selected[i]=car;
+      }
+      if(typeof renderPickers==='function')renderPickers();
+      if(typeof renderCompare==='function')renderCompare();
+      if(typeof show==='function')show('vergleich');
+    }
+  };
 })();
 </script>
 
